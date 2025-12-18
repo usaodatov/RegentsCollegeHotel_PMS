@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Staff Login · Regent College Hotel</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #111827;
+            color: #e5e7eb;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 80px;
+            margin: 0;
+        }
+        h1 { margin-bottom: 0.5rem; }
+        p  { margin-bottom: 1.5rem; color: #9ca3af; }
+        form {
+            background: #020617;
+            padding: 1.5rem 2rem;
+            border-radius: 0.75rem;
+            min-width: 280px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+        }
+        label {
+            display: block;
+            margin-top: 0.75rem;
+            margin-bottom: 0.25rem;
+            font-size: 0.9rem;
+        }
+        input {
+            width: 100%;
+            padding: 0.5rem;
+            border-radius: 0.4rem;
+            border: 1px solid #4b5563;
+            background: #020617;
+            color: #e5e7eb;
+        }
+        button {
+            margin-top: 1rem;
+            width: 100%;
+            padding: 0.7rem;
+            border-radius: 0.5rem;
+            border: none;
+            cursor: pointer;
+            background: #3b82f6;
+            color: #eff6ff;
+            font-size: 1rem;
+        }
+        a { color: #60a5fa; font-size: 0.85rem; }
+    </style>
+</head>
+<body>
+    <h1>Staff Login</h1>
+    <p>Use your PMS credentials (superuser / password for now)</p>
+
+    <!-- 🔥 RELATIVE PATH — WORKS LOCALLY + EC2 + DOMAIN -->
+    <form method="post" action="/api/login">
+        <label for="username">Username</label>
+        <input id="username" name="username" required>
+
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password" required>
+
+        <button type="submit">Sign In</button>
+    </form>
+
+    <p style="margin-top:1rem;">
+        <a href="index.html">← Back to home</a>
+    </p>
+</body>
+</html>

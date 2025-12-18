@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Book a Room · Regent College Hotel</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #111827;
+            color: #e5e7eb;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 60px;
+            margin: 0;
+        }
+        h1 {
+            margin-bottom: 0.5rem;
+        }
+        p {
+            margin-bottom: 1.5rem;
+            color: #9ca3af;
+        }
+        form {
+            background: #020617;
+            padding: 1.5rem 2rem;
+            border-radius: 0.75rem;
+            min-width: 320px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+        }
+        label {
+            display: block;
+            margin-top: 0.75rem;
+            margin-bottom: 0.25rem;
+            font-size: 0.9rem;
+        }
+        input {
+            width: 100%;
+            padding: 0.5rem;
+            border-radius: 0.4rem;
+            border: 1px solid #4b5563;
+            background: #020617;
+            color: #e5e7eb;
+        }
+        button {
+            margin-top: 1rem;
+            width: 100%;
+            padding: 0.7rem;
+            border-radius: 0.5rem;
+            border: none;
+            cursor: pointer;
+            background: #10b981;
+            color: #022c22;
+            font-size: 1rem;
+        }
+        a {
+            color: #60a5fa;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Book a Room</h1>
+    <p>Single night · next 5 days · £100/night</p>
+
+    <!-- Correct POST action (works locally + on AWS) -->
+    <form method="post" action="/api/guest-reservations">
+
+        <label for="first_name">First name</label>
+        <input id="first_name" name="first_name" required>
+
+        <label for="last_name">Last name</label>
+        <input id="last_name" name="last_name" required>
+
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email" required>
+
+        <label for="phone">Phone</label>
+        <input id="phone" name="phone" required>
+
+        <label for="stay_date">Stay date</label>
+        <!-- Must match stay_date_str in Python route -->
+        <input id="stay_date" name="stay_date_str" type="date" required>
+
+        <button type="submit">Submit Reservation</button>
+    </form>
+
+    <p style="margin-top:1rem;">
+        <a href="index.html">← Back to home</a>
+    </p>
+
+</body>
+</html>

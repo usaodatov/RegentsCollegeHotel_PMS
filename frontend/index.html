@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Regent College Hotel PMS</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #111827;
+            color: #e5e7eb;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+        }
+        h1 {
+            margin-bottom: 0.5rem;
+        }
+        p {
+            margin-bottom: 2rem;
+            color: #9ca3af;
+        }
+        .buttons {
+            display: flex;
+            gap: 1rem;
+        }
+        button {
+            padding: 0.75rem 1.5rem;
+            border-radius: 0.5rem;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+        }
+        .book-btn {
+            background: #10b981;
+            color: #022c22;
+        }
+        .staff-btn {
+            background: #3b82f6;
+            color: #eff6ff;
+        }
+    </style>
+</head>
+<body>
+    <h1>Regent College Hotel</h1>
+    <p>Mini PMS · 5 Rooms · £100/night</p>
+
+    <div class="buttons">
+        <button class="book-btn" onclick="window.location.href='book.html'">
+            Book Reservation
+        </button>
+        <button class="staff-btn" onclick="window.location.href='staff-login.html'">
+            Staff Login
+        </button>
+    </div>
+</body>
+</html>

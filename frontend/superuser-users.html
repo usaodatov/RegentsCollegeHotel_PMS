@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Superuser – Manage Staff Users</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <style>
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            max-width: 800px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+            background: #f5f5f5;
+        }
+
+        h1, h2 {
+            margin-bottom: 0.5rem;
+        }
+
+        .card {
+            background: white;
+            border-radius: 8px;
+            padding: 1rem 1.25rem;
+            margin-bottom: 1rem;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.05);
+        }
+
+        label {
+            display: block;
+            margin: 0.5rem 0 0.25rem;
+        }
+
+        input {
+            width: 100%;
+            padding: 0.4rem 0.5rem;
+            box-sizing: border-box;
+        }
+
+        button {
+            margin-top: 0.75rem;
+            padding: 0.45rem 0.9rem;
+            border-radius: 4px;
+            border: none;
+            cursor: pointer;
+            background: #111827;
+            color: white;
+            font-weight: 500;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        .small {
+            font-size: 0.9rem;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Superuser – Manage Staff Users</h1>
+    <p class="small">
+        Use this page to create and delete staff accounts. For now, responses will show as raw JSON after submit –
+        just use your browser’s Back button to return to this page.
+    </p>
+
+    <!-- Create user -->
+    <div class="card">
+        <h2>Create staff user</h2>
+        <form action="/api/users" method="post">
+            <label for="create-username">Username</label>
+            <input id="create-username" name="username" required>
+
+            <label for="create-password">Password</label>
+            <input id="create-password" name="password" type="password" required>
+
+            <button type="submit">Create User</button>
+        </form>
+        <p class="small">
+            This will send a <strong>POST /api/users</strong> with <code>username</code> and <code>password</code>.
+        </p>
+    </div>
+
+    <!-- Delete user -->
+    <div class="card">
+        <h2>Delete staff user</h2>
+        <form action="/api/users/delete" method="post">
+            <label for="delete-user-id">User ID</label>
+            <input id="delete-user-id" name="user_id" required>
+
+            <button type="submit">Delete User</button>
+        </form>
+        <p class="small">
+            This will send a <strong>POST /api/users/delete</strong> with <code>user_id</code>.
+            You can grab the ID from the “View all users” endpoint below.
+        </p>
+    </div>
+
+    <!-- View all users -->
+    <div class="card">
+        <h2>View all users</h2>
+        <p class="small">
+            Opens the raw JSON list of users returned by your API. Use this to confirm that
+            create/delete is working.
+        </p>
+        <p>
+            <a href="/api/users" target="_blank">
+                <button type="button">Open /api/users in new tab</button>
+            </a>
+        </p>
+    </div>
+
+    <p class="small">
+        Tip: later we can hide this page behind proper sessions and add a navigation link from a
+        “Superuser home” screen. For now, this is enough to prove RBAC for the assignment.
+    </p>
+
+</body>
+</html>
