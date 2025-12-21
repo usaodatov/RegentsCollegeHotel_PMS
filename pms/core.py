@@ -3,13 +3,15 @@ import datetime
 import hashlib
 import binascii
 import os
+import pymysql
+
 from zoneinfo import ZoneInfo  # timezone support from std lib
 
-# build absolute path so db always same place
+# build absolute path for db to be at same place
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DB_NAME = os.path.join(PROJECT_ROOT, "pms.db")
 
-# basic app constants
+# app constants
 APP_NAME = "Regent College Hotel PMS"
 HOTEL_NAME = "Regent College Hotel"
 BASE_RATE = 100.00
@@ -43,15 +45,35 @@ def verify_password(plain_password: str, stored_hash: str) -> bool:
 
 
 # open sqlite connection with fk enabled
-def get_db_connection() -> sqlite3.Connection:
+def get_db_connection():
+    db_host = os.getenv("DB_HOST")
+
+    # If DB_HOST exists, assume AWS / RDS (MySQL)
+    if db_host:
+        conn = pymysql.connect(
+            host=db_host,
+            port=int(os.getenv("DB_PORT", "3306")),
+            user=os.getenv("DB_USER"),
+            password=os.getenv("DB_PASSWORD"),
+            database=os.getenv("DB_NAME"),
+            cursorclass=pymysql.cursors.DictCursor,
+            autocommit=False,
+        )
+        return conn
+
+    # Fallback: local SQLite (unchanged behavior)
     conn = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON;")
     return conn
 
 
+
 # create tables if missing
+
 def create_tables() -> None:
+# If running on MySQL (RDS), schema is managed separately
+    if os.getenv("DB_HOST"):
+        return
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -127,11 +149,22 @@ def create_tables() -> None:
 
 # seed superuser and base rooms
 def init_superuser_and_rooms() -> None:
+    if os.getenv("DB_HOST"):
+        return
+
+    # If running on MySQL (RDS), skip seeding entirely
+    if os.getenv("DB_HOST"):
+        return
+
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT 1 FROM users WHERE username = ?", (SUPERUSER_USERNAME,))
+    cursor.execute(
+        "SELECT 1 FROM users WHERE username = ?",
+        (SUPERUSER_USERNAME,),
+    )
     superuser_exists = cursor.fetchone() is not None
+
     if not superuser_exists:
         hashed = hash_password(SUPERUSER_DEFAULT_PASSWORD)
         cursor.execute(
@@ -144,6 +177,7 @@ def init_superuser_and_rooms() -> None:
 
     cursor.execute("SELECT COUNT(*) AS c FROM rooms")
     rooms_count = cursor.fetchone()["c"]
+
     if rooms_count == 0:
         for i in range(1, 6):
             cursor.execute(
@@ -167,7 +201,7 @@ def init_db() -> None:
 def authenticate_user(username: str, password: str):
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM users WHERE username = ?", (username,))
+    cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
     user = cursor.fetchone()
     conn.close()
 
@@ -488,3 +522,4 @@ init_db()
 if __name__ == "__main__":
     print("CORE DB PATH =", DB_NAME)
     print("DB initialised (tables + seed).")
+
