@@ -14,18 +14,80 @@
             justify-content: center;
             height: 100vh;
             margin: 0;
+            text-align: center;
         }
+
         h1 {
             margin-bottom: 0.5rem;
+            font-size: 2.2rem;
         }
-        p {
-            margin-bottom: 2rem;
+
+        .subtitle {
+            margin-bottom: 1.2rem;
             color: #9ca3af;
+            font-size: 1rem;
         }
+
+        .badges {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            justify-content: center;
+            margin-bottom: 1.5rem;
+        }
+
+        .badge {
+            font-size: 0.75rem;
+            padding: 0.3rem 0.6rem;
+            border-radius: 999px;
+            border: 1px solid rgba(255,255,255,0.15);
+            background: rgba(255,255,255,0.05);
+            color: #d1d5db;
+        }
+
+        .description {
+            max-width: 720px;
+            margin-bottom: 1.8rem;
+            color: #d1d5db;
+            line-height: 1.6;
+            font-size: 0.95rem;
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1rem;
+            max-width: 720px;
+            margin-bottom: 2rem;
+        }
+
+        .feature {
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.12);
+            border-radius: 0.75rem;
+            padding: 1rem;
+            font-size: 0.9rem;
+        }
+
+        .feature h3 {
+            margin: 0 0 0.4rem 0;
+            font-size: 1rem;
+            color: #f9fafb;
+        }
+
+        .feature p {
+            margin: 0;
+            color: #9ca3af;
+            font-size: 0.85rem;
+            line-height: 1.4;
+        }
+
         .buttons {
             display: flex;
             gap: 1rem;
+            margin-bottom: 1.2rem;
         }
+
         button {
             padding: 0.75rem 1.5rem;
             border-radius: 0.5rem;
@@ -33,20 +95,64 @@
             cursor: pointer;
             font-size: 1rem;
         }
+
         .book-btn {
             background: #10b981;
             color: #022c22;
         }
+
         .staff-btn {
             background: #3b82f6;
             color: #eff6ff;
         }
+
+        .footer {
+            font-size: 0.75rem;
+            color: #6b7280;
+        }
+
+        @media (max-width: 760px) {
+            .features {
+                grid-template-columns: 1fr;
+            }
+        }
     </style>
 </head>
 <body>
-    <h1>Regent College Hotel</h1>
-    <p>Mini PMS · 5 Rooms · £100/night</p>
 
+    <h1>Regent College Hotel</h1>
+    <div class="subtitle">Mini PMS · 5 Rooms · £100 / night</div>
+
+    <div class="badges">
+        <div class="badge">AWS EC2</div>
+        <div class="badge">Nginx</div>
+        <div class="badge">Flask API</div>
+        <div class="badge">RDS MySQL</div>
+    </div>
+
+    <div class="description">
+        This project demonstrates a small, cloud-hosted Property Management System (PMS)
+        designed for a micro-hotel. It showcases a tiered cloud architecture with a static
+        frontend, a Flask backend deployed on AWS EC2, and a persistent MySQL database
+        hosted on Amazon RDS.
+    </div>
+
+    <div class="features">
+        <div class="feature">
+            <h3>Guest booking</h3>
+            <p>Check availability and create reservations in real time.</p>
+        </div>
+        <div class="feature">
+            <h3>Staff workflow</h3>
+            <p>Secure login, booking grid, and operational visibility.</p>
+        </div>
+        <div class="feature">
+            <h3>Cloud architecture</h3>
+            <p>Nginx → Gunicorn → Flask → RDS with live read/write proof.</p>
+        </div>
+    </div>
+
+    <!-- BUTTONS UNCHANGED -->
     <div class="buttons">
         <button class="book-btn" onclick="window.location.href='book.html'">
             Book Reservation
@@ -55,5 +161,10 @@
             Staff Login
         </button>
     </div>
+
+    <div class="footer">
+        Coursework project for SWE5308 · Cloud Technologies · Regent College London (2026)
+    </div>
+
 </body>
 </html>
