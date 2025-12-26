@@ -4,53 +4,54 @@ import hashlib
 import binascii
 import os
 import pymysql
+from zoneinfo import ZoneInfo
 
-from zoneinfo import ZoneInfo  # timezone support from std lib
-
-# build absolute path for db to be at same place
+# paths + main config, keep here so easy find later
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-DB_NAME = os.path.join(PROJECT_ROOT, "pms.db")
+DB_NAME = os.path.join(PROJECT_ROOT, "pms.db")  # sqlite file for local dev
 
-# app constants
 APP_NAME = "Regent College Hotel PMS"
 HOTEL_NAME = "Regent College Hotel"
-BASE_RATE = 100.00
+BASE_RATE = 100.00  # default room price
 CURRENCY = "GBP"
-MAX_STAY_DAYS = 1  # single night only, maybe later change
-MAX_BOOKING_WINDOW_DAYS = 5  # today + few days
-TIMEZONE = "Europe/London"
+MAX_STAY_DAYS = 1  # only single night now
+MAX_BOOKING_WINDOW_DAYS = 5  # today + 4 days
+TIMEZONE = "Europe/London"  # important for dates
 
 SUPERUSER_USERNAME = "superuser"
-SUPERUSER_DEFAULT_PASSWORD = "password"
+SUPERUSER_DEFAULT_PASSWORD = "password"  # temp only
 SUPERUSER_EMAIL = "saodatov@gmail.com"
 
 SES_SENDER_EMAIL = "noreply@saodatov.com"
-SES_REGION = "eu-west-1"  # emails are fake for now
+SES_REGION = "eu-west-1"
 
 
-# password hash helper
-def hash_password(plain_password: str) -> str:
-    salt = os.urandom(32)
-    key = hashlib.pbkdf2_hmac("sha256", plain_password.encode("utf-8"), salt, 100_000)
-    return binascii.hexlify(salt + key).decode("utf-8")
+# decide which db to use (mysql on aws or local sqlite)
+def is_mysql() -> bool:
+    # if DB_HOST set, assume mysql
+    return bool(os.getenv("DB_HOST"))
 
 
-# check password against stored hash
-def verify_password(plain_password: str, stored_hash: str) -> bool:
-    stored_hash_bytes = binascii.unhexlify(stored_hash)
-    salt = stored_hash_bytes[:32]
-    stored_key = stored_hash_bytes[32:]
-    key = hashlib.pbkdf2_hmac("sha256", plain_password.encode("utf-8"), salt, 100_000)
-    return key == stored_key
+def now_sql() -> str:
+    # sqlite and mysql use diff now syntax
+    return "NOW()" if is_mysql() else "datetime('now')"
 
 
-# open sqlite connection with fk enabled
+def placeholder() -> str:
+    # sql param symbol depends on db
+    return "%s" if is_mysql() else "?"
+
+
+def ph(n: int) -> str:
+    # helper for multiple placeholders
+    return ", ".join([placeholder()] * n)
+
+
 def get_db_connection():
+    # mysql connection (aws rds)
     db_host = os.getenv("DB_HOST")
-
-    # If DB_HOST exists, assume AWS / RDS (MySQL)
     if db_host:
-        conn = pymysql.connect(
+        return pymysql.connect(
             host=db_host,
             port=int(os.getenv("DB_PORT", "3306")),
             user=os.getenv("DB_USER"),
@@ -59,333 +60,295 @@ def get_db_connection():
             cursorclass=pymysql.cursors.DictCursor,
             autocommit=False,
         )
-        return conn
 
-    # Fallback: local SQLite (unchanged behavior)
+    # sqlite for local testing
     conn = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row
     return conn
 
 
+def fetchone_dict(row):
+    # unify sqlite + mysql row format
+    if row is None:
+        return None
+    if isinstance(row, sqlite3.Row):
+        return dict(row)
+    return row
 
-# create tables if missing
 
-def create_tables() -> None:
-# If running on MySQL (RDS), schema is managed separately
-    if os.getenv("DB_HOST"):
+def fetchall_dict(rows):
+    # same but for many rows
+    if not rows:
+        return []
+    if isinstance(rows[0], sqlite3.Row):
+        return [dict(r) for r in rows]
+    return rows
+
+
+# password hashing, standard approach
+def hash_password(plain_password: str) -> str:
+    salt = os.urandom(32)
+    key = hashlib.pbkdf2_hmac("sha256", plain_password.encode("utf-8"), salt, 100_000)
+    return binascii.hexlify(salt + key).decode("utf-8")
+
+
+def verify_password(plain_password: str, stored_hash: str) -> bool:
+    # extract salt + hash
+    raw = binascii.unhexlify(stored_hash)
+    salt = raw[:32]
+    stored_key = raw[32:]
+    key = hashlib.pbkdf2_hmac("sha256", plain_password.encode("utf-8"), salt, 100_000)
+    return key == stored_key
+
+
+# sqlite schema setup (mysql handled elsewhere)
+def create_tables():
+    if is_mysql():
         return
-    conn = get_db_connection()
-    cursor = conn.cursor()
 
-    cursor.execute(
-        """
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    # users table
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
             password_hash TEXT NOT NULL,
-            role TEXT NOT NULL CHECK (role IN ('SUPERUSER', 'STAFF')),
+            role TEXT NOT NULL CHECK (role IN ('SUPERUSER','STAFF')),
             created_at DATETIME NOT NULL
         )
-        """
-    )
+    """)
 
-    cursor.execute(
-        """
+    # rooms table
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS rooms (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            room_number TEXT NOT NULL UNIQUE,
-            status TEXT DEFAULT 'ACTIVE'
-                CHECK (status IN ('ACTIVE', 'OUT_OF_SERVICE')),
+            room_number TEXT UNIQUE NOT NULL,
+            status TEXT DEFAULT 'ACTIVE',
             base_rate REAL DEFAULT 100.00
         )
-        """
-    )
+    """)
 
-    cursor.execute(
-        """
+    # guests table
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS guests (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            first_name TEXT NOT NULL,
-            last_name TEXT NOT NULL,
-            email TEXT NOT NULL,
-            phone TEXT NOT NULL,
+            first_name TEXT,
+            last_name TEXT,
+            email TEXT,
+	    phone TEXT,
             created_at DATETIME NOT NULL
         )
-        """
-    )
+    """)
 
-    cursor.execute(
-        """
+    # reservations table
+    cur.execute("""
         CREATE TABLE IF NOT EXISTS reservations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            room_id INTEGER NOT NULL,
-            guest_id INTEGER NOT NULL,
-            stay_date TEXT NOT NULL,
-            status TEXT NOT NULL
-                CHECK (status IN (
-                    'BOOKED', 'CHECKED_IN', 'CHECKED_OUT',
-                    'CANCELLED', 'NO_SHOW'
-                )),
-            created_at DATETIME NOT NULL,
-            updated_at DATETIME NOT NULL,
-            FOREIGN KEY (room_id) REFERENCES rooms(id),
-            FOREIGN KEY (guest_id) REFERENCES guests(id)
+            room_id INTEGER,
+            guest_id INTEGER,
+            stay_date TEXT,
+            status TEXT,
+            created_at DATETIME,
+            updated_at DATETIME
         )
-        """
-    )
-
-    # prevent double booking for active stays only
-    cursor.execute(
-        """
-        CREATE UNIQUE INDEX IF NOT EXISTS ux_room_date_active
-        ON reservations(room_id, stay_date)
-        WHERE status IN ('BOOKED', 'CHECKED_IN')
-        """
-    )
+    """)
 
     conn.commit()
     conn.close()
 
 
-# seed superuser and base rooms
-def init_superuser_and_rooms() -> None:
-    if os.getenv("DB_HOST"):
-        return
-
-    # If running on MySQL (RDS), skip seeding entirely
-    if os.getenv("DB_HOST"):
+def init_superuser_and_rooms():
+    if is_mysql():
         return
 
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cur = conn.cursor()
 
-    cursor.execute(
-        "SELECT 1 FROM users WHERE username = ?",
-        (SUPERUSER_USERNAME,),
-    )
-    superuser_exists = cursor.fetchone() is not None
-
-    if not superuser_exists:
-        hashed = hash_password(SUPERUSER_DEFAULT_PASSWORD)
-        cursor.execute(
-            """
-            INSERT INTO users (username, password_hash, role, created_at)
-            VALUES (?, ?, 'SUPERUSER', datetime('now'))
-            """,
-            (SUPERUSER_USERNAME, hashed),
+    # create admin user once
+    cur.execute("SELECT 1 FROM users WHERE username=?", (SUPERUSER_USERNAME,))
+    if cur.fetchone() is None:
+        cur.execute(
+            "INSERT INTO users (username,password_hash,role,created_at) VALUES (?,?, 'SUPERUSER', datetime('now'))",
+            (SUPERUSER_USERNAME, hash_password(SUPERUSER_DEFAULT_PASSWORD)),
         )
 
-    cursor.execute("SELECT COUNT(*) AS c FROM rooms")
-    rooms_count = cursor.fetchone()["c"]
-
-    if rooms_count == 0:
-        for i in range(1, 6):
-            cursor.execute(
-                """
-                INSERT INTO rooms (room_number, status, base_rate)
-                VALUES (?, 'ACTIVE', ?)
-                """,
-                (str(i + 100), BASE_RATE),
+    # seed rooms if empty
+    cur.execute("SELECT COUNT(*) as c FROM rooms")
+    if cur.fetchone()["c"] == 0:
+        for i in range(101, 106):
+            cur.execute(
+                "INSERT INTO rooms (room_number,status,base_rate) VALUES (?,?,?)",
+                (str(i), "ACTIVE", BASE_RATE),
             )
 
     conn.commit()
     conn.close()
 
 
-def init_db() -> None:
+def init_db():
+    # init only affects sqlite
     create_tables()
     init_superuser_and_rooms()
 
 
-# login check
-def authenticate_user(username: str, password: str):
+# custom errors used by api
+class Unauthorized(Exception): pass
+class Forbidden(Exception): pass
+class BadRequest(Exception): pass
+class NotFound(Exception): pass
+
+
+def require_role(current_user, allowed):
+    # simple role gate
+    if not current_user:
+        raise Unauthorized("Unauthorized")
+    if current_user.get("role") not in allowed:
+        raise Forbidden("Forbidden")
+
+
+def authenticate_user(username, password):
+    # check login against users table
     conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM users WHERE username = %s", (username,))
-    user = cursor.fetchone()
+    cur = conn.cursor()
+    cur.execute(f"SELECT * FROM users WHERE username={placeholder()}", (username,))
+    user = fetchone_dict(cur.fetchone())
     conn.close()
 
-    if user is None:
+    if not user:
         return None
     if not verify_password(password, user["password_hash"]):
         return None
     return user
 
 
-# current date in hotel timezone
-def get_today_in_hotel_timezone() -> datetime.date:
+def api_login(username, password):
+    # login endpoint logic
+    user = authenticate_user(username, password)
+    if not user:
+        raise Unauthorized("Invalid credentials")
+    return {
+        "token": "simulated_token",
+        "username": user["username"],
+        "role": user["role"],
+    }
+
+
+# date helper, always hotel timezone
+def get_today_in_hotel_timezone():
     tz = ZoneInfo(TIMEZONE)
     return datetime.datetime.now(tz).date()
 
 
-# limit booking window
-def is_date_within_booking_window(stay_date: datetime.date) -> bool:
+def is_date_within_booking_window(stay_date):
+    # enforce booking window
     today = get_today_in_hotel_timezone()
-    max_date = today + datetime.timedelta(days=MAX_BOOKING_WINDOW_DAYS - 1)
-    return today <= stay_date <= max_date
+    return today <= stay_date <= today + datetime.timedelta(days=MAX_BOOKING_WINDOW_DAYS - 1)
 
 
-# find first free room
-def find_free_room_for_date(stay_date: datetime.date):
-    stay_date_iso = stay_date.isoformat()
-
+def find_free_room_for_date(stay_date):
+    # pick first free room
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM rooms WHERE status='ACTIVE' ORDER BY room_number")
+    rooms = fetchall_dict(cur.fetchall())
 
-    cursor.execute("SELECT * FROM rooms WHERE status = 'ACTIVE' ORDER BY room_number")
-    active_rooms = cursor.fetchall()
-
-    cursor.execute(
-        """
-        SELECT room_id FROM reservations
-        WHERE stay_date = ?
-          AND status IN ('BOOKED', 'CHECKED_IN')
-        """,
-        (stay_date_iso,),
+    cur.execute(
+        "SELECT room_number FROM reservations WHERE stay_date=? AND status IN ('BOOKED','CHECKED_IN')",
+        (stay_date.isoformat(),),
     )
-    reserved_room_ids = {row["room_id"] for row in cursor.fetchall()}
+    busy = {r["room_number"] for r in fetchall_dict(cur.fetchall())}
 
-    for room in active_rooms:
-        if room["id"] not in reserved_room_ids:
+    for r in rooms:
+        if r["room_number"] not in busy:
             conn.close()
-            return room
+            return r
 
     conn.close()
     return None
 
 
-# build availability matrix for ui
-def build_availability_grid():
+def api_grid(current_user):
+    # grid visible for staff + admin
+    require_role(current_user, ["STAFF", "SUPERUSER"])
     today = get_today_in_hotel_timezone()
-    dates_list = [today + datetime.timedelta(days=offset) for offset in range(MAX_BOOKING_WINDOW_DAYS)]
+    dates = [today + datetime.timedelta(days=i) for i in range(MAX_BOOKING_WINDOW_DAYS)]
 
     conn = get_db_connection()
-    cursor = conn.cursor()
-
-    cursor.execute("SELECT * FROM rooms WHERE status = 'ACTIVE' ORDER BY room_number")
-    rooms = cursor.fetchall()
-
-    min_date = min(dates_list).isoformat()
-    max_date = max(dates_list).isoformat()
-    cursor.execute(
-        """
-        SELECT room_id, stay_date, status
-        FROM reservations
-        WHERE stay_date BETWEEN ? AND ?
-          AND status IN ('BOOKED', 'CHECKED_IN')
-        """,
-        (min_date, max_date),
-    )
-    reservations = cursor.fetchall()
-
-    status_map = {}
-    for res in reservations:
-        stay_date_obj = datetime.date.fromisoformat(res["stay_date"])
-        key = (res["room_id"], stay_date_obj)
-        status_map[key] = res["status"]
-
-    grid = []
-    for room in rooms:
-        row = []
-        for date in dates_list:
-            key = (room["id"], date)
-            row.append(status_map.get(key, "FREE"))
-        grid.append(row)
-
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM rooms WHERE status='ACTIVE'")
+    rooms = fetchall_dict(cur.fetchall())
     conn.close()
-    return rooms, dates_list, grid
 
-
-# fake email sender
-def send_email(to_email: str, subject: str, body: str) -> None:
-    print(f"SIMULATED EMAIL:\nTo: {to_email}\nSubject: {subject}\nBody:\n{body}\n")
-
-
-def send_reservation_created_email(guest, reservation, room) -> None:
-    subject = f"Reservation Created - {HOTEL_NAME}"
-    body = f"""
-Dear {guest['first_name']} {guest['last_name']},
-
-Your reservation at {HOTEL_NAME} has been created.
-
-Stay date: {reservation['stay_date']}
-Room: {room['room_number']}
-Rate: {BASE_RATE} {CURRENCY}
-Status: BOOKED
-"""
-    send_email(guest["email"], subject, body)
-
-
-def send_reservation_cancelled_email(guest, reservation, room) -> None:
-    subject = f"Reservation Cancelled - {HOTEL_NAME}"
-    body = f"""
-Dear {guest['first_name']} {guest['last_name']},
-
-Your reservation at {HOTEL_NAME} on {reservation['stay_date']} has been cancelled.
-
-Room: {room['room_number']}
-
-Regards,
-{HOTEL_NAME}
-"""
-    send_email(guest["email"], subject, body)
-
-
-def send_superuser_password_reminder() -> None:
-    subject = f"Superuser Password Reminder - {HOTEL_NAME}"
-    body = f"""
-The default superuser password is: {SUPERUSER_DEFAULT_PASSWORD}
-"""
-    send_email(SUPERUSER_EMAIL, subject, body)
-
-
-# simple error types
-class Unauthorized(Exception):
-    pass
-
-
-class Forbidden(Exception):
-    pass
-
-
-class BadRequest(Exception):
-    pass
-
-
-class NotFound(Exception):
-    pass
-
-
-# role gate check
-def require_role(current_user, allowed_roles):
-    if current_user is None:
-        raise Unauthorized("Unauthorized")
-    if current_user["role"] not in allowed_roles:
-        raise Forbidden("Forbidden")
-
-
-# login api
-def api_login(username: str, password: str) -> dict:
-    user = authenticate_user(username, password)
-    if user is None:
-        raise Unauthorized("Invalid credentials")
-    return {"token": "simulated_token", "role": user["role"], "username": user["username"]}
-
-
-def api_superuser_forgot_password() -> dict:
-    send_superuser_password_reminder()
-    return {"message": f"Password reminder has been emailed to {SUPERUSER_EMAIL}"}
-
-
-def api_grid(current_user) -> dict:
-    require_role(current_user, ["STAFF", "SUPERUSER"])
-    rooms, dates_list, grid = build_availability_grid()
+    # grid not fully dynamic yet
     return {
         "rooms": [{"id": r["id"], "room_number": r["room_number"]} for r in rooms],
-        "dates": [str(d) for d in dates_list],
-        "grid": grid,
+        "dates": [str(d) for d in dates],
+        "grid": [["FREE"] * len(dates) for _ in rooms],
     }
 
+
+def api_users_list(current_user):
+    # list users, admin only
+    require_role(current_user, ["SUPERUSER"])
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT id, username, role, created_at FROM users ORDER BY id")
+    users = fetchall_dict(cur.fetchall())
+    conn.close()
+    return {"users": users}
+
+
+def api_users_create(current_user, username, password, role="STAFF"):
+    # create new user
+    require_role(current_user, ["SUPERUSER"])
+    if not username or not password:
+        raise BadRequest("Username and password required")
+
+    role = role.upper()
+    if role not in ("SUPERUSER", "STAFF"):
+        raise BadRequest("Invalid role")
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+    try:
+        cur.execute(
+            f"INSERT INTO users (username,password_hash,role,created_at) VALUES ({ph(3)}, {now_sql()})",
+            (username, hash_password(password), role),
+        )
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        conn.close()
+        raise BadRequest("Username exists")
+
+    uid = cur.lastrowid
+    conn.close()
+    return {"id": uid, "username": username, "role": role}
+
+
+def api_users_delete(current_user, user_id):
+    # delete user by id
+    require_role(current_user, ["SUPERUSER"])
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute(
+        f"SELECT id FROM users WHERE id={placeholder()}",
+        (user_id,)
+    )
+    if not cur.fetchone():
+        conn.close()
+        raise NotFound("User not found")
+
+    cur.execute(
+        f"DELETE FROM users WHERE id={placeholder()}",
+        (user_id,)
+    )
+    conn.commit()
+    conn.close()
+    return {"deleted_user_id": user_id}
 
 def api_guest_reservations(
     current_user,
@@ -397,129 +360,52 @@ def api_guest_reservations(
 ) -> dict:
     require_role(current_user, ["STAFF", "SUPERUSER"])
 
-    stay_date = datetime.date.fromisoformat(stay_date_str)
-    if not is_date_within_booking_window(stay_date):
-        raise BadRequest("Date must be within next 5 days")
+    # basic field check
+    if not all([first_name, last_name, email, phone, stay_date_str]):
+        raise BadRequest("Missing required fields")
 
-    free_room = find_free_room_for_date(stay_date)
-    if free_room is None:
-        raise BadRequest("No rooms available on this date")
+    # date must be YYYY-MM-DD
+    try:
+        stay_date = datetime.date.fromisoformat(stay_date_str)
+    except ValueError:
+        raise BadRequest("Invalid date format, expected YYYY-MM-DD")
 
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cur = conn.cursor()
 
-    cursor.execute(
-        """
-        INSERT INTO guests (first_name, last_name, email, phone, created_at)
-        VALUES (?, ?, ?, ?, datetime('now'))
-        """,
-        (first_name, last_name, email, phone),
-    )
-    guest_id = cursor.lastrowid
+    # pick first active room (simple logic for now)
+    cur.execute("SELECT room_number FROM rooms WHERE status='ACTIVE' LIMIT 1")
+    room = fetchone_dict(cur.fetchone())
 
-    try:
-        cursor.execute(
-            """
-            INSERT INTO reservations
-                (room_id, guest_id, stay_date, status, created_at, updated_at)
-            VALUES (?, ?, ?, 'BOOKED', datetime('now'), datetime('now'))
-            """,
-            (free_room["id"], guest_id, stay_date.isoformat()),
-        )
-    except sqlite3.IntegrityError:
-        conn.rollback()
+    if not room:
         conn.close()
-        raise BadRequest("No rooms available on this date")
+        raise BadRequest("No rooms available")
 
-    reservation_id = cursor.lastrowid
+    # mysql reservations table is flat, so store guest info directly there
+    cur.execute(
+        f"""
+        INSERT INTO reservations
+            (first_name, last_name, email, phone, stay_date, room_number, status)
+        VALUES ({ph(7)})
+        """,
+        (
+            first_name,
+            last_name,
+            email,
+            phone,
+            stay_date.isoformat(),
+            int(room["room_number"]),
+            "BOOKED",
+        ),
+    )
+
+    reservation_id = cur.lastrowid
     conn.commit()
-
-    cursor.execute("SELECT * FROM guests WHERE id = ?", (guest_id,))
-    guest = cursor.fetchone()
-    cursor.execute("SELECT * FROM reservations WHERE id = ?", (reservation_id,))
-    reservation = cursor.fetchone()
     conn.close()
-
-    send_reservation_created_email(guest, reservation, free_room)
 
     return {
         "reservation_id": reservation_id,
-        "room_number": free_room["room_number"],
-        "stay_date": stay_date.isoformat(),
         "status": "BOOKED",
+        "room_number": room["room_number"],
+        "stay_date": stay_date.isoformat(),
     }
-
-
-def load_reservation_with_relations(res_id: int):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute(
-        """
-        SELECT
-            r.id AS res_id,
-            r.room_id AS res_room_id,
-            r.guest_id AS res_guest_id,
-            r.stay_date AS res_stay_date,
-            r.status AS res_status,
-            r.created_at AS res_created_at,
-            r.updated_at AS res_updated_at,
-            g.first_name, g.last_name, g.email, g.phone,
-            rm.room_number
-        FROM reservations r
-        JOIN guests g ON r.guest_id = g.id
-        JOIN rooms rm ON r.room_id = rm.id
-        WHERE r.id = ?
-        """,
-        (res_id,),
-    )
-    row = cursor.fetchone()
-    conn.close()
-
-    if row is None:
-        raise NotFound("Reservation not found")
-
-    reservation = {
-        "id": row["res_id"],
-        "room_id": row["res_room_id"],
-        "guest_id": row["res_guest_id"],
-        "stay_date": row["res_stay_date"],
-        "status": row["res_status"],
-        "created_at": row["res_created_at"],
-        "updated_at": row["res_updated_at"],
-    }
-    guest = {"first_name": row["first_name"], "last_name": row["last_name"], "email": row["email"], "phone": row["phone"]}
-    room = {"room_number": row["room_number"]}
-    return reservation, guest, room
-
-
-def api_cancel(current_user, res_id: int) -> dict:
-    require_role(current_user, ["STAFF", "SUPERUSER"])
-    reservation, guest, room = load_reservation_with_relations(res_id)
-
-    if reservation["status"] not in ("BOOKED", "CHECKED_IN"):
-        raise BadRequest("Only active reservations can be cancelled")
-
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute(
-        """
-        UPDATE reservations
-        SET status = 'CANCELLED', updated_at = datetime('now')
-        WHERE id = ?
-        """,
-        (res_id,),
-    )
-    conn.commit()
-    conn.close()
-
-    send_reservation_cancelled_email(guest, reservation, room)
-    return {"message": "Cancelled", "status": "CANCELLED"}
-
-
-# init db on import
-init_db()
-
-if __name__ == "__main__":
-    print("CORE DB PATH =", DB_NAME)
-    print("DB initialised (tables + seed).")
-

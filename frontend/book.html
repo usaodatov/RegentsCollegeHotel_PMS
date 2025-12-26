@@ -64,8 +64,7 @@
     <h1>Book a Room</h1>
     <p>Single night · next 5 days · £100/night</p>
 
-    <!-- Correct POST action (works locally + on AWS) -->
-    <form method="post" action="/api/guest-reservations">
+    <form id="reservationForm">
 
         <label for="first_name">First name</label>
         <input id="first_name" name="first_name" required>
@@ -80,15 +79,47 @@
         <input id="phone" name="phone" required>
 
         <label for="stay_date">Stay date</label>
-        <!-- Must match stay_date_str in Python route -->
         <input id="stay_date" name="stay_date_str" type="date" required>
 
         <button type="submit">Submit Reservation</button>
+        <div id="statusBox" style="margin-top:12px; font-size:0.9rem; color:#9ca3af; min-height:1.2em;"></div>
     </form>
 
     <p style="margin-top:1rem;">
         <a href="index.html">← Back to home</a>
     </p>
+
+
+<script>
+  const form = document.querySelector("#reservationForm");
+  const statusBox = document.querySelector("#statusBox");
+
+  form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    statusBox.textContent = "Booking...";
+
+    const fd = new FormData(form);
+
+    try {
+      const res = await fetch("/api/guest-reservations", { method: "POST", body: fd });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok) {
+        statusBox.textContent = data.error || "Booking failed.";
+        return;
+      }
+
+      sessionStorage.setItem("reservationConfirmation", JSON.stringify(data));
+      sessionStorage.setItem("reservationEmail", (document.querySelector("#email").value || "").trim());
+
+      statusBox.textContent = "Confirmed. Redirecting...";
+      window.location.href = "/confirmation.html";
+
+    } catch (err) {
+      statusBox.textContent = "Network error. Try again.";
+    }
+  });
+</script>
 
 </body>
 </html>
