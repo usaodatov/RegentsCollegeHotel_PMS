@@ -14,7 +14,7 @@
       color:#111827;
     }
     .wrap{
-      max-width: 900px;
+      max-width: 1000px;
       margin: 0 auto;
       display:flex;
       gap:24px;
@@ -59,6 +59,37 @@
       margin:6px 6px 0 0;
     }
     .btn:hover{ opacity:0.9; }
+    table{
+      width:100%;
+      border-collapse:collapse;
+      font-size:14px;
+    }
+    th, td{
+      border-bottom:1px solid #e5e7eb;
+      text-align:left;
+      padding:10px 8px;
+      vertical-align:top;
+    }
+    th{
+      background:#f9fafb;
+      font-weight:600;
+    }
+    .notes{
+      background:#f8fafc;
+      border:1px dashed #e5e7eb;
+      border-radius:12px;
+      padding:14px;
+      font-size:13px;
+      color:#374151;
+    }
+    .notes h3{
+      margin:0 0 8px 0;
+      font-size:14px;
+      letter-spacing:0.02em;
+    }
+    .table-wrap{
+      overflow-x:auto;
+    }
   </style>
 </head>
 
@@ -70,26 +101,38 @@
     <div class="col">
 
       <div class="card">
-        <h2>Reservations</h2>
-        <p>Availability and booking overview.</p>
-
-        <a class="btn" href="grid.html">View availability grid</a>
+        <div class="notes">
+          <h3>NOTES (demo + coursework)</h3>
+          <p>[1] Why simplified: Max 25 reservations only (5 rooms × 5 days). Enough to show full flow, not overbuild for demo, i think ok.</p>
+          <p>[2] How data come here: Page fetch data as JSON from backend (GET). JS render rows after load, sort by arrival date then name, pretty simple way.</p>
+          <p>[3] Cancel flow: Click Cancel → confirm Yes/No. Yes send POST to backend. After cancel, list fetched again so screen stay fresh, no stale view.</p>
+          <p>[4] Data storage: Backend talk to RDS MySQL. Create/cancel update DB rows. UI never touch DB direct, just display, no magic.</p>
+          <p>[5] Future evolution: Later can add Check-in, Check-out, Billing, Invoice, Room move. Same pattern: endpoint + button + refresh list, should work.</p>
+        </div>
       </div>
 
       <div class="card">
-        <h2>Find reservation</h2>
-        <p>Search for existing reservations.</p>
+        <h2>Reservations (max 25)</h2>
 
-        <a class="btn" href="find-id.html">By reservation ID</a>
-        <a class="btn" href="find-lastname.html">By last name</a>
-        <a class="btn" href="find-date.html">By arrival date</a>
-      </div>
-
-      <div class="card">
-        <h2>Actions</h2>
-        <p>Operational tasks.</p>
-
-        <a class="btn" href="cancel.html">Cancel reservation</a>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Arrival date</th>
+                <th>Room number</th>
+                <th>Guest name</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="reservations-body">
+              <tr>
+                <td colspan="6">Loading...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
 
       <div class="muted">
@@ -98,6 +141,22 @@
 
     </div>
   </div>
+
+  <script>
+    const reservationsBody = document.getElementById("reservations-body");
+
+    const renderLoading = () => {
+      reservationsBody.innerHTML = "<tr><td colspan=\"6\">Loading...</td></tr>";
+    };
+
+    renderLoading();
+
+    // TODO: need check endpoint, call GET /api/reservations (json) for max 25, dont guess fields
+    // TODO: sort by arrival_date ASC, then guest name alphabetical, pretty sure compare ok
+    // TODO: after fetch, render rows from response (no fake data)
+    // TODO: for cancel, click -> confirm Yes/No, Yes send POST /api/cancel with reservation id
+    // TODO: after cancel success, refresh list (re-fetch) so table stay fresh
+  </script>
 
 </body>
 </html>
