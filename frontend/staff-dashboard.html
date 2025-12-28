@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Staff Dashboard · Regent College Hotel</title>
+
+  <style>
+    body{
+      font-family: Arial, sans-serif;
+      margin:0;
+      padding:24px;
+      background:#f3f4f6;
+      color:#111827;
+    }
+    .wrap{
+      max-width: 900px;
+      margin: 0 auto;
+      display:flex;
+      gap:24px;
+      align-items:flex-start;
+    }
+    .col{
+      flex:1;
+      display:flex;
+      flex-direction:column;
+      gap:16px;
+    }
+    .card{
+      background:#fff;
+      border:1px solid #e5e7eb;
+      border-radius:12px;
+      padding:18px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+    }
+    h1{ margin:0 0 16px 0; font-size:22px; }
+    h2{ margin:0 0 12px 0; font-size:18px; }
+    p{ margin:0 0 10px 0; font-size:14px; }
+    a{
+      color:#2563eb;
+      text-decoration:none;
+      display:inline-block;
+      margin-top:6px;
+      font-size:14px;
+    }
+    .muted{
+      color:#6b7280;
+      font-size:12px;
+      margin-top:10px;
+    }
+    .btn{
+      display:inline-block;
+      padding:9px 12px;
+      border-radius:10px;
+      background:#111827;
+      color:#fff;
+      font-size:14px;
+      text-decoration:none;
+      margin:6px 6px 0 0;
+    }
+    .btn:hover{ opacity:0.9; }
+  </style>
+</head>
+
+<body>
+
+  <h1>Staff Dashboard</h1>
+
+  <div class="wrap">
+    <div class="col">
+
+      <div class="card">
+        <h2>Reservations</h2>
+        <p>Availability and booking overview.</p>
+
+        <a class="btn" href="grid.html">View availability grid</a>
+      </div>
+
+      <div class="card">
+        <h2>Find reservation</h2>
+        <p>Search for existing reservations.</p>
+
+        <a class="btn" href="find-id.html">By reservation ID</a>
+        <a class="btn" href="find-lastname.html">By last name</a>
+        <a class="btn" href="find-date.html">By arrival date</a>
+      </div>
+
+      <div class="card">
+        <h2>Actions</h2>
+        <p>Operational tasks.</p>
+
+        <a class="btn" href="cancel.html">Cancel reservation</a>
+      </div>
+
+      <div class="muted">
+        <a href="index.html">← Back to home</a>
+      </div>
+
+    </div>
+  </div>
+
+</body>
+</html>
