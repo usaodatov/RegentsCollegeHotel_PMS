@@ -1,0 +1,237 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Availability Grid</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- source ref, just for tracking :contentReference[oaicite:0]{index=0} -->
+
+  <style>
+    body { font-family: Arial, sans-serif; margin: 16px; }
+    h1 { margin: 0 0 12px; }
+
+    .bar { display:flex; gap:10px; align-items:center; margin: 10px 0 16px; }
+    .bar button { padding: 8px 12px; cursor:pointer; }
+
+    .legend { display:flex; gap:12px; align-items:center; font-size: 14px; }
+    .pill { display:inline-flex; gap:6px; align-items:center; }
+    .dot { width:12px; height:12px; border-radius: 3px; display:inline-block; border:1px solid #3332; }
+
+    .wrap { overflow-x:auto; padding-bottom: 8px; }
+    .grid { display:grid; gap:6px; }
+
+    .cell {
+      width: 74px; height: 52px;
+      border: 1px solid #0002; border-radius: 10px;
+      display:flex; align-items:center; justify-content:center;
+      font-size: 12px;
+      user-select: none;
+    }
+
+    .hdr { background:#f4f4f4; font-weight:700; }
+    .room { background:#f4f4f4; font-weight:700; width: 86px; justify-content:flex-start; padding-left:10px; }
+
+    .free { background:#c9f7c9; }
+    .booked { background:#ffd1d1; }
+    .other { background:#e7e7ff; }
+
+    #status { margin-top:10px; font-size:13px; color:#333; }
+    a { text-decoration:none; }
+
+      position: absolute;
+      top: 6px;
+      right: 6px;
+      width: 22px;
+      height: 22px;
+      border-radius: 999px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 14px;
+      line-height: 1;
+      background: #111;
+      color: #fff;
+      border: 2px solid #fff;
+      box-shadow: 0 1px 4px rgba(0,0,0,.25);
+    }
+
+    /* explanation boxes under grid */
+    .anno-wrap {
+      margin-top: 14px;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(280px, 1fr));
+      gap: 10px;
+      max-width: 920px;
+    }
+
+    .anno {
+      border: 1px solid #0002;
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: #fafafa;
+    }
+
+    .anno h3 {
+      margin: 0 0 6px;
+      font-size: 14px;
+    }
+
+    .anno p, .anno ul {
+      margin: 0;
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .anno ul { padding-left: 18px; }
+    code { background:#00000010; padding:2px 6px; border-radius: 6px; }
+
+    @media (max-width: 820px) {
+      .anno-wrap { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <h1>Availability Grid</h1>
+
+  <div class="bar">
+    <button id="load">Load</button>
+
+    <div class="legend">
+      <span class="pill"><span class="dot free"></span>FREE</span>
+      <span class="pill"><span class="dot booked"></span>BOOKED</span>
+      <span class="pill"><span class="dot other"></span>OTHER</span>
+    </div>
+
+    <span style="margin-left:auto"></span>
+    <a href="staff-dashboard.html">← Back</a>
+  </div>
+
+  <div class="wrap">
+    <div id="grid" class="grid"></div>
+  </div>
+
+  <div id="status">waiting...</div>
+
+  <!-- info blocks for demo / coursework context -->
+  <div class="anno-wrap" id="anno">
+    <div class="anno">
+      <h3>① Big picture</h3>
+      <p>This availability grid demonstrates a working cloud-based PMS pipeline, where live reservation data is processed by the backend and rendered dynamically in the frontend to support real operational decision-making.</p>
+    </div>
+
+    <div class="anno">
+      <h3>② What the grid represents</h3>
+      <ul>
+        <li>Rows = rooms</li>
+        <li>Columns = dates</li>
+        <li>Each square = one room × one day</li>
+        <li>Green = FREE, Red = BOOKED</li>
+      </ul>
+    </div>
+
+    <div class="anno">
+      <h3>③ Where the data comes from</h3>
+      <ul>
+        <li>Source endpoint: <b>/api/grid</b></li>
+        <li>Backend reads rooms + reservations</li>
+        <li>Status per cell calculated server side</li>
+      </ul>
+    </div>
+
+    <div class="anno">
+      <h3>④ How it reaches this page</h3>
+      <ul>
+        <li>Frontend calls API using <code>fetch</code></li>
+        <li>Backend sends JSON back</li>
+        <li>JS builds grid, nothing hardcoded</li>
+      </ul>
+    </div>
+
+    <div class="anno">
+      <h3>⑤ Why it’s useful</h3>
+      <ul>
+        <li>Quick check for staff</li>
+        <li>Stops double booking drama</li>
+        <li>Base for future booking logic</li>
+      </ul>
+    </div>
+
+    <div class="anno">
+      <h3>⑥ What this proves in scope</h3>
+      <ul>
+        <li>DB → API → UI flow works</li>
+        <li>Backend + frontend talking fine</li>
+        <li>Real full-stack deploy proof</li>
+      </ul>
+    </div>
+  </div>
+
+  <script>
+    // main holders for grid + status text
+    const gridEl = document.getElementById("grid");
+    const statusEl = document.getElementById("status");
+
+    // map backend status to css class
+    function clsForStatus(s) {
+      s = String(s || "").toUpperCase();
+      if (s === "FREE") return "free";
+      if (s === "BOOKED") return "booked";
+      return "other";
+    }
+
+    // fetch grid data + render it
+    async function loadGrid() {
+      statusEl.textContent = "Loading…";
+      gridEl.innerHTML = "";
+
+      try {
+        const res = await fetch("/api/grid", { cache: "no-store" });
+        if (!res.ok) throw new Error("HTTP " + res.status);
+
+        const payload = await res.json(); // days + rooms from backend
+        const dates = (payload.dates || []).slice(0, 5);
+        const rooms = (payload.rooms || []).slice(0, 5);
+
+        if (!dates.length || !rooms.length) {
+          statusEl.textContent = "No data returned";
+          return;
+        }
+
+        // first column is room numbers, rest is dates
+        gridEl.style.gridTemplateColumns = `86px repeat(${dates.length}, 74px)`;
+
+        const out = [];
+
+          // header row
+          out.push(`<div class="cell hdr room">Room</div>`);
+          for (let i = 0; i < dates.length; i++) {
+            const d = dates[i];
+            out.push(`<div class="cell hdr">${d}</div>`);
+          }
+
+          for (const [rowIdx, r] of rooms.entries()) {
+            out.push(`<div class="cell room">#${r.room_number}</div>`);
+
+            for (const [colIdx, d] of dates.entries()) {
+              const st = (payload.grid && payload.grid[rowIdx] && payload.grid[rowIdx][colIdx]) ? payload.grid[rowIdx][colIdx] : "FREE";
+              out.push(`<div class="cell ${clsForStatus(st)}">${st}</div>`);
+            }
+          }
+
+        gridEl.innerHTML = out.join("");
+        statusEl.textContent = `Showing ${rooms.length} rooms × ${dates.length} days`;
+
+      } catch (e) {
+        statusEl.textContent = "Error: " + e;
+      }
+    }
+
+    // load on click + first page load
+    document.getElementById("load").addEventListener("click", loadGrid);
+    loadGrid();
+  </script>
+</body>
+</html>
+
