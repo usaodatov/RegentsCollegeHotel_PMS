@@ -116,7 +116,7 @@ def create_reservation():
             last_name=data.get("last_name"),
             email=data.get("email"),
             phone=data.get("phone"),
-            stay_date_str=data.get("stay_date_str"),
+            stay_date_str=(data.get("stay_date_str") or data.get("stay_date")),
         )
         return jsonify(result), 201
 

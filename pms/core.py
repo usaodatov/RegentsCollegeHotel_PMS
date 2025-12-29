@@ -6,53 +6,58 @@ import os
 import pymysql
 from zoneinfo import ZoneInfo
 
-# paths + main config, keep here so easy find later
+
+# -----------------------------
+# basic config + paths
+# -----------------------------
+# keep all main settings here so i dont search later
+
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-DB_NAME = os.path.join(PROJECT_ROOT, "pms.db")  # sqlite file for local dev
+DB_NAME = os.path.join(PROJECT_ROOT, "pms.db")  # local sqlite db
 
 APP_NAME = "Regent College Hotel PMS"
 HOTEL_NAME = "Regent College Hotel"
-BASE_RATE = 100.00  # default room price
+BASE_RATE = 100.00
 CURRENCY = "GBP"
-MAX_STAY_DAYS = 1  # only single night now
-MAX_BOOKING_WINDOW_DAYS = 5  # today + 4 days
-TIMEZONE = "Europe/London"  # important for dates
+
+MAX_STAY_DAYS = 1              # only 1 night bookings
+MAX_BOOKING_WINDOW_DAYS = 5    # today + next 4 days
+TIMEZONE = "Europe/London"     # hotel timezone, not server
 
 SUPERUSER_USERNAME = "superuser"
-SUPERUSER_DEFAULT_PASSWORD = "password"  # temp only
+SUPERUSER_DEFAULT_PASSWORD = "password"  # temp, change later
 SUPERUSER_EMAIL = "saodatov@gmail.com"
 
-SES_SENDER_EMAIL = "noreply@saodatov.com"
-SES_REGION = "eu-west-1"
 
+# -----------------------------
+# db helpers
+# -----------------------------
 
-# decide which db to use (mysql on aws or local sqlite)
 def is_mysql() -> bool:
-    # if DB_HOST set, assume mysql
+    # if env var exists -> using mysql
     return bool(os.getenv("DB_HOST"))
 
 
 def now_sql() -> str:
-    # sqlite and mysql use diff now syntax
+    # mysql and sqlite use diff syntax
     return "NOW()" if is_mysql() else "datetime('now')"
 
 
 def placeholder() -> str:
-    # sql param symbol depends on db
+    # sql placeholder depends on db type
     return "%s" if is_mysql() else "?"
 
 
 def ph(n: int) -> str:
-    # helper for multiple placeholders
+    # helper to repeat placeholders
     return ", ".join([placeholder()] * n)
 
 
 def get_db_connection():
-    # mysql connection (aws rds)
-    db_host = os.getenv("DB_HOST")
-    if db_host:
+    # mysql (aws rds etc)
+    if is_mysql():
         return pymysql.connect(
-            host=db_host,
+            host=os.getenv("DB_HOST"),
             port=int(os.getenv("DB_PORT", "3306")),
             user=os.getenv("DB_USER"),
             password=os.getenv("DB_PASSWORD"),
@@ -61,14 +66,14 @@ def get_db_connection():
             autocommit=False,
         )
 
-    # sqlite for local testing
+    # sqlite for local dev
     conn = sqlite3.connect(DB_NAME)
     conn.row_factory = sqlite3.Row
     return conn
 
 
 def fetchone_dict(row):
-    # unify sqlite + mysql row format
+    # make sqlite row look like mysql dict
     if row is None:
         return None
     if isinstance(row, sqlite3.Row):
@@ -85,24 +90,48 @@ def fetchall_dict(rows):
     return rows
 
 
-# password hashing, standard approach
+# -----------------------------
+# passwords (safe version)
+# -----------------------------
+
 def hash_password(plain_password: str) -> str:
+    # hash + salt password before saving
     salt = os.urandom(32)
-    key = hashlib.pbkdf2_hmac("sha256", plain_password.encode("utf-8"), salt, 100_000)
+    key = hashlib.pbkdf2_hmac(
+        "sha256",
+        plain_password.encode("utf-8"),
+        salt,
+        100_000,
+    )
     return binascii.hexlify(salt + key).decode("utf-8")
 
 
-def verify_password(plain_password: str, stored_hash: str) -> bool:
-    # extract salt + hash
+def verify_password(plain_password: str, stored_hash) -> bool:
+    # fix: mysql may return bytes, strip spaces too
+    if isinstance(stored_hash, (bytes, bytearray)):
+        stored_hash = stored_hash.decode("utf-8")
+
+    stored_hash = stored_hash.strip()  # important fix
+
     raw = binascii.unhexlify(stored_hash)
     salt = raw[:32]
     stored_key = raw[32:]
-    key = hashlib.pbkdf2_hmac("sha256", plain_password.encode("utf-8"), salt, 100_000)
+
+    key = hashlib.pbkdf2_hmac(
+        "sha256",
+        plain_password.encode("utf-8"),
+        salt,
+        100_000,
+    )
     return key == stored_key
 
 
-# sqlite schema setup (mysql handled elsewhere)
+# -----------------------------
+# db init (sqlite only)
+# -----------------------------
+
 def create_tables():
+    # mysql schema handled elsewhere
     if is_mysql():
         return
 
@@ -130,25 +159,28 @@ def create_tables():
         )
     """)
 
-    # guests table
+    # guests table (basic info only)
     cur.execute("""
         CREATE TABLE IF NOT EXISTS guests (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             first_name TEXT,
             last_name TEXT,
             email TEXT,
-	    phone TEXT,
+            phone TEXT,
             created_at DATETIME NOT NULL
         )
     """)
 
-    # reservations table
+    # reservations table (flat for simplicity)
     cur.execute("""
         CREATE TABLE IF NOT EXISTS reservations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            room_id INTEGER,
-            guest_id INTEGER,
+            first_name TEXT,
+            last_name TEXT,
+            email TEXT,
+            phone TEXT,
             stay_date TEXT,
+            room_number INTEGER,
             status TEXT,
             created_at DATETIME,
             updated_at DATETIME
@@ -160,13 +192,14 @@ def create_tables():
 
 
 def init_superuser_and_rooms():
+    # only for sqlite
     if is_mysql():
         return
 
     conn = get_db_connection()
     cur = conn.cursor()
 
-    # create admin user once
+    # create default admin if missing
     cur.execute("SELECT 1 FROM users WHERE username=?", (SUPERUSER_USERNAME,))
     if cur.fetchone() is None:
         cur.execute(
@@ -174,8 +207,8 @@ def init_superuser_and_rooms():
             (SUPERUSER_USERNAME, hash_password(SUPERUSER_DEFAULT_PASSWORD)),
         )
 
-    # seed rooms if empty
-    cur.execute("SELECT COUNT(*) as c FROM rooms")
+    # seed rooms once
+    cur.execute("SELECT COUNT(*) AS c FROM rooms")
     if cur.fetchone()["c"] == 0:
         for i in range(101, 106):
             cur.execute(
@@ -188,12 +221,15 @@ def init_superuser_and_rooms():
 
 
 def init_db():
-    # init only affects sqlite
+    # call once on startup
     create_tables()
     init_superuser_and_rooms()
 
 
-# custom errors used by api
+# -----------------------------
+# custom errors
+# -----------------------------
+
 class Unauthorized(Exception): pass
 class Forbidden(Exception): pass
 class BadRequest(Exception): pass
@@ -201,15 +237,19 @@ class NotFound(Exception): pass
 
 
 def require_role(current_user, allowed):
-    # simple role gate
+    # basic role guard
     if not current_user:
         raise Unauthorized("Unauthorized")
     if current_user.get("role") not in allowed:
         raise Forbidden("Forbidden")
 
 
+# -----------------------------
+# auth
+# -----------------------------
+
 def authenticate_user(username, password):
-    # check login against users table
+    # check login against db
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute(f"SELECT * FROM users WHERE username={placeholder()}", (username,))
@@ -224,73 +264,80 @@ def authenticate_user(username, password):
 
 
 def api_login(username, password):
-    # login endpoint logic
+    # login api used by flask
     user = authenticate_user(username, password)
     if not user:
         raise Unauthorized("Invalid credentials")
+
     return {
-        "token": "simulated_token",
+        "token": "simulated_token",  # fake token for demo
         "username": user["username"],
         "role": user["role"],
     }
 
 
-# date helper, always hotel timezone
+# -----------------------------
+# dates
+# -----------------------------
+
 def get_today_in_hotel_timezone():
+    # always use hotel tz
     tz = ZoneInfo(TIMEZONE)
     return datetime.datetime.now(tz).date()
 
 
-def is_date_within_booking_window(stay_date):
-    # enforce booking window
-    today = get_today_in_hotel_timezone()
-    return today <= stay_date <= today + datetime.timedelta(days=MAX_BOOKING_WINDOW_DAYS - 1)
-
-
-def find_free_room_for_date(stay_date):
-    # pick first free room
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM rooms WHERE status='ACTIVE' ORDER BY room_number")
-    rooms = fetchall_dict(cur.fetchall())
-
-    cur.execute(
-        "SELECT room_number FROM reservations WHERE stay_date=? AND status IN ('BOOKED','CHECKED_IN')",
-        (stay_date.isoformat(),),
-    )
-    busy = {r["room_number"] for r in fetchall_dict(cur.fetchall())}
-
-    for r in rooms:
-        if r["room_number"] not in busy:
-            conn.close()
-            return r
-
-    conn.close()
-    return None
-
+# -----------------------------
+# grid logic
+# -----------------------------
 
 def api_grid(current_user):
-    # grid visible for staff + admin
+    # staff + admin only
     require_role(current_user, ["STAFF", "SUPERUSER"])
+
     today = get_today_in_hotel_timezone()
     dates = [today + datetime.timedelta(days=i) for i in range(MAX_BOOKING_WINDOW_DAYS)]
 
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM rooms WHERE status='ACTIVE'")
+
+    cur.execute("SELECT id, room_number FROM rooms WHERE status='ACTIVE' ORDER BY room_number")
     rooms = fetchall_dict(cur.fetchall())
+
+    # get booked rooms
+    cur.execute("""
+        SELECT room_number, stay_date
+        FROM reservations
+        WHERE status IN ('BOOKED','CHECKED_IN')
+    """)
+    reservations = fetchall_dict(cur.fetchall())
     conn.close()
 
-    # grid not fully dynamic yet
+    booked = {
+        (str(r["room_number"]), str(r["stay_date"])): "BOOKED"
+        for r in reservations
+    }
+
+    # build grid matrix
+    grid = []
+    for room in rooms:
+        row = []
+        for d in dates:
+            row.append(booked.get((str(room["room_number"]), d.isoformat()), "FREE"))
+        grid.append(row)
+
     return {
-        "rooms": [{"id": r["id"], "room_number": r["room_number"]} for r in rooms],
-        "dates": [str(d) for d in dates],
-        "grid": [["FREE"] * len(dates) for _ in rooms],
+        "rooms": rooms,
+        "dates": [d.isoformat() for d in dates],
+        "grid": grid,
     }
 
 
+# -----------------------------
+# users
+# -----------------------------
+
 def api_users_list(current_user):
-    # list users, admin only
+    # admin only
     require_role(current_user, ["SUPERUSER"])
     conn = get_db_connection()
     cur = conn.cursor()
@@ -301,8 +348,9 @@ def api_users_list(current_user):
 
 
 def api_users_create(current_user, username, password, role="STAFF"):
-    # create new user
+    # create staff/admin user
     require_role(current_user, ["SUPERUSER"])
+
     if not username or not password:
         raise BadRequest("Username and password required")
 
@@ -312,6 +360,7 @@ def api_users_create(current_user, username, password, role="STAFF"):
 
     conn = get_db_connection()
     cur = conn.cursor()
+
     try:
         cur.execute(
             f"INSERT INTO users (username,password_hash,role,created_at) VALUES ({ph(3)}, {now_sql()})",
@@ -334,58 +383,65 @@ def api_users_delete(current_user, user_id):
     conn = get_db_connection()
     cur = conn.cursor()
 
-    cur.execute(
-        f"SELECT id FROM users WHERE id={placeholder()}",
-        (user_id,)
-    )
+    cur.execute(f"SELECT id FROM users WHERE id={placeholder()}", (user_id,))
     if not cur.fetchone():
         conn.close()
         raise NotFound("User not found")
 
-    cur.execute(
-        f"DELETE FROM users WHERE id={placeholder()}",
-        (user_id,)
-    )
+    cur.execute(f"DELETE FROM users WHERE id={placeholder()}", (user_id,))
     conn.commit()
     conn.close()
     return {"deleted_user_id": user_id}
 
+
+# -----------------------------
+# bookings
+# -----------------------------
+
 def api_guest_reservations(
     current_user,
-    first_name: str,
-    last_name: str,
-    email: str,
-    phone: str,
-    stay_date_str: str
-) -> dict:
+    first_name,
+    last_name,
+    email,
+    phone,
+    stay_date_str,
+):
+    # staff/admin booking flow
     require_role(current_user, ["STAFF", "SUPERUSER"])
 
-    # basic field check
     if not all([first_name, last_name, email, phone, stay_date_str]):
         raise BadRequest("Missing required fields")
 
-    # date must be YYYY-MM-DD
     try:
         stay_date = datetime.date.fromisoformat(stay_date_str)
     except ValueError:
-        raise BadRequest("Invalid date format, expected YYYY-MM-DD")
+        raise BadRequest("Invalid date format")
 
     conn = get_db_connection()
     cur = conn.cursor()
 
-    # pick first active room (simple logic for now)
-    cur.execute("SELECT room_number FROM rooms WHERE status='ACTIVE' LIMIT 1")
-    room = fetchone_dict(cur.fetchone())
+    # find active rooms
+    cur.execute("SELECT room_number FROM rooms WHERE status='ACTIVE' ORDER BY room_number")
+    active_rooms = [int(r["room_number"]) for r in cur.fetchall()]
 
-    if not room:
+    # find booked rooms for date
+    cur.execute(
+        f"SELECT room_number FROM reservations WHERE stay_date={placeholder()} AND status='BOOKED'",
+        (stay_date.isoformat(),),
+    )
+    booked = {int(r["room_number"]) for r in cur.fetchall()}
+
+    free_rooms = [r for r in active_rooms if r not in booked]
+    if not free_rooms:
         conn.close()
-        raise BadRequest("No rooms available")
+        raise BadRequest("No rooms available for that date")
 
-    # mysql reservations table is flat, so store guest info directly there
+    chosen_room = free_rooms[0]  # simple first free logic
+
     cur.execute(
         f"""
         INSERT INTO reservations
-            (first_name, last_name, email, phone, stay_date, room_number, status)
+        (first_name,last_name,email,phone,stay_date,room_number,status)
         VALUES ({ph(7)})
         """,
         (
@@ -394,7 +450,7 @@ def api_guest_reservations(
             email,
             phone,
             stay_date.isoformat(),
-            int(room["room_number"]),
+            chosen_room,
             "BOOKED",
         ),
     )
@@ -405,7 +461,7 @@ def api_guest_reservations(
 
     return {
         "reservation_id": reservation_id,
+        "room_number": chosen_room,
         "status": "BOOKED",
-        "room_number": room["room_number"],
         "stay_date": stay_date.isoformat(),
     }
