@@ -100,6 +100,21 @@ def grid():
         # if role not right
         return jsonify({"error": str(e)}), 403
 
+# list reservations for staff dashboard
+@app.route("/api/reservations", methods=["GET"])
+def reservations_list():
+    # fake staff login for now, later from auth
+    current_user = {"role": "STAFF"}
+    limit = request.args.get("limit", 25)
+
+    try:
+        return jsonify(core.api_reservations_list(current_user, limit=limit)), 200
+    except core.Forbidden as e:
+        return jsonify({"error": str(e)}), 403
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 
 # booking endpoint from form
 @app.route("/api/guest-reservations", methods=["POST"])

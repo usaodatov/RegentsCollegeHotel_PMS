@@ -7,9 +7,6 @@ import pymysql
 from zoneinfo import ZoneInfo
 
 
-# -----------------------------
-# basic config + paths
-# -----------------------------
 # keep all main settings here so i dont search later
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -330,6 +327,93 @@ def api_grid(current_user):
         "dates": [d.isoformat() for d in dates],
         "grid": grid,
     }
+
+
+def api_reservations_list(current_user, limit=25):
+    # staff + admin only
+    require_role(current_user, ["STAFF", "SUPERUSER"])
+
+    try:
+        limit = int(limit)
+    except Exception:
+        limit = 25
+
+    limit = max(1, min(limit, 200))
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute(f"""
+        SELECT
+            id,
+	    stay_date AS arrival_date,
+            room_number,
+            status,
+            first_name,
+            last_name,
+            email,
+            phone
+        FROM reservations
+        ORDER BY stay_date DESC, room_number ASC, id DESC
+        LIMIT {placeholder()}
+    """, (limit,))
+
+    rows = fetchall_dict(cur.fetchall())
+    conn.close()
+
+    out = []
+    for r in rows:
+        fn = (r.get("first_name") or "").strip()
+        ln = (r.get("last_name") or "").strip()
+        guest_name = (fn + " " + ln).strip() or "—"
+
+        out.append({
+            "reservation_id": r.get("id"),		
+            "arrival_date": str(r.get("arrival_date") or ""),
+            "room_number": r.get("room_number"),
+            "guest_name": guest_name,
+            "email": (r.get("email") or "—"),
+            "phone": (r.get("phone") or "—"),
+            "status": (r.get("status") or "—"),
+        })
+
+    return {"reservations": out}
+
+
+def api_cancel(current_user, reservation_id):
+    # staff + admin only
+    require_role(current_user, ["STAFF", "SUPERUSER"])
+
+    if reservation_id is None:
+        raise BadRequest("Missing reservation_id")
+
+    try:
+        reservation_id = int(reservation_id)
+    except Exception:
+        raise BadRequest("Invalid reservation_id")
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    # cancel = state change (no delete)
+    cur.execute(
+        f"""
+        UPDATE reservations
+        SET status='CANCELLED'
+        WHERE id={placeholder()} AND status IN ('BOOKED','CHECKED_IN')
+        """,
+        (reservation_id,),
+    )
+
+    if cur.rowcount == 0:
+        conn.close()
+        raise NotFound("Reservation not found or not cancellable")
+
+    conn.commit()
+    conn.close()
+
+    return {"reservation_id": reservation_id, "status": "CANCELLED"}
+
 
 
 # -----------------------------
