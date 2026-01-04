@@ -3,6 +3,12 @@ from pms import core
 
 app = Flask(__name__)
 
+@app.get("/api/health")
+def health():
+    return {"ok": True}, 200
+
+
+
 # serve landing page from frontend folder
 @app.route("/")
 def root():
