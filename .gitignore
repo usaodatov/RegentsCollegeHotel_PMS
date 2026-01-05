@@ -12,3 +12,5 @@ __pycache__/
 pms.db*
 ALTER
 python3
+smoke.sh
+ssh
