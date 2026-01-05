@@ -1,7 +1,13 @@
 from flask import Flask, request, jsonify, send_from_directory
 from pms import core
+from functools import wraps
+from flask import session, redirect
+
+
+
 
 app = Flask(__name__)
+app.secret_key = "your-secret-key"
 
 @app.get("/api/health")
 def health():
@@ -25,7 +31,7 @@ def serve_static(filename):
 
 # login endpoint, accepts json or form
 @app.route("/api/login", methods=["POST"])
-def login():
+def login_api():
     # frontend might send form, postman might send json
     data = request.get_json() if request.is_json else request.form
     username = (data.get("username") or "").strip()
@@ -149,14 +155,58 @@ def create_reservation():
         return jsonify({"error": str(e)}), 403
 
 
+
+
+
+@app.route("/api/logout", methods=["POST"])
+def logout():
+    session.pop("user", None)
+    return jsonify({"message": "Logged out"}), 200
+
+
+# decorator to protect routes
+def login_required(f):
+    from functools import wraps
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if "user" not in session:
+            return jsonify({"error": "Unauthorized"}), 401
+        return f(*args, **kwargs)
+    return wrapper
+
+def token_required(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth_header = request.headers.get("Authorization", "")
+        parts = auth_header.split()
+
+        if len(parts) != 2 or parts[0] != "Bearer" or parts[1] != "simulated_token":
+            return jsonify({"error": "Unauthorized"}), 401
+
+        # define current_user HERE
+        request.current_user = {
+            "username": "superuser",
+            "role": "SUPERUSER"
+        }
+
+        return f(*args, **kwargs)
+    return decorated
+
+
+
+
 # cancel by reservation id
 @app.route("/api/cancel", methods=["POST"])
+@token_required
 def cancel_reservation():
-    # still no real auth, so hardcoded
-    current_user = {"role": "STAFF"}
-    data = request.get_json() if request.is_json else request.form
-    res_id = int(data.get("reservation_id"))  # must be int
+    current_user = request.current_user
+    data = request.get_json()
 
+    # Baby check for missing input
+    if not data or "reservation_id" not in data:
+        return jsonify({"error": "Missing reservation_id"}), 400
+
+    res_id = int(data["reservation_id"])
     try:
         return jsonify(core.api_cancel(current_user, res_id)), 200
     except core.BadRequest as e:
@@ -165,6 +215,32 @@ def cancel_reservation():
     except core.NotFound as e:
         # reservation not found
         return jsonify({"error": str(e)}), 404
+
+
+# JSON booking endpoint (compat). Uses the same logic as /api/guest-reservations.
+@app.route("/api/reserve", methods=["POST"])
+@token_required
+def reserve():
+    current_user = request.current_user
+    data = request.get_json(silent=True) or {}
+
+    try:
+        result = core.api_guest_reservations(
+            current_user,
+            first_name=data.get("first_name"),
+            last_name=data.get("last_name"),
+            email=data.get("email"),
+            phone=data.get("phone"),
+            stay_date_str=(data.get("stay_date_str") or data.get("stay_date")),
+        )
+        return jsonify(result), 201
+
+    except core.BadRequest as e:
+        return jsonify({"error": str(e)}), 400
+    except core.Forbidden as e:
+        return jsonify({"error": str(e)}), 403
+
+
 
 
 # run locally only
