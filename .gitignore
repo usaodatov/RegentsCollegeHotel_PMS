@@ -7,3 +7,8 @@ __pycache__/
 .env
 .env.*
 *.db.bak*
+
+# local db + scratch
+pms.db*
+ALTER
+python3
