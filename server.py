@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify, send_from_directory
 from pms import core
 from functools import wraps
 from flask import session, redirect
-
+import os
 
 
 
@@ -11,10 +11,9 @@ app.secret_key = "your-secret-key"
 
 @app.get("/api/health")
 def health():
-    return {"ok": True}, 200
-
-
-
+    # db mode: mysql if DB_HOST set, else sqlite
+    db_mode = "mysql" if (os.getenv("DB_HOST") or "").strip() else "sqlite"
+    return {"ok": True, "db_mode": db_mode, "git": "059c4eb"}, 200
 # serve landing page from frontend folder
 @app.route("/")
 def root():
