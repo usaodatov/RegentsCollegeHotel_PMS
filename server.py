@@ -111,6 +111,21 @@ def grid():
         # if role not right
         return jsonify({"error": str(e)}), 403
 
+@app.route("/api/email-log", methods=["GET"])
+def email_log():
+    log_path = "/var/log/pms/emails.log"
+
+    try:
+        if not os.path.exists(log_path):
+            return jsonify({"log": ""}), 200
+
+        with open(log_path, "r") as f:
+            return jsonify({"log": f.read()}), 200
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # list reservations for staff dashboard
 @app.route("/api/reservations", methods=["GET"])
 def reservations_list():
@@ -144,6 +159,17 @@ def create_reservation():
             phone=data.get("phone"),
             stay_date_str=(data.get("stay_date_str") or data.get("stay_date")),
         )
+
+        # demo email outbox log (no real emails sent)
+        try:
+            with open("/var/log/pms/emails.log", "a") as f:
+                f.write(
+                    f'TO: {data.get("email","")} | SUBJECT: Reservation Confirmation | STATUS: QUEUED\n'
+                )
+        except Exception:
+            # never block booking flow if logging fails
+            pass
+
         return jsonify(result), 201
 
     except core.BadRequest as e:
@@ -216,7 +242,8 @@ def cancel_reservation():
         return jsonify({"error": str(e)}), 404
 
 
-# JSON booking endpoint (compat). Uses the same logic as /api/guest-reservations.
+# JSON booking endpoint. Uses the same logic as /api/guest-reservations.
+
 @app.route("/api/reserve", methods=["POST"])
 @token_required
 def reserve():
@@ -232,6 +259,16 @@ def reserve():
             phone=data.get("phone"),
             stay_date_str=(data.get("stay_date_str") or data.get("stay_date")),
         )
+
+        # demo email outbox log (no real emails sent)
+        try:
+            with open("/var/log/pms/emails.log", "a") as f:
+                f.write(
+                    f'TO: {data.get("email","")} | SUBJECT: Reservation Confirmation | STATUS: QUEUED\n'
+                )
+        except Exception:
+            pass
+
         return jsonify(result), 201
 
     except core.BadRequest as e:
