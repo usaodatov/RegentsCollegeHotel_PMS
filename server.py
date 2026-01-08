@@ -247,34 +247,47 @@ def cancel_reservation():
 @app.route("/api/reserve", methods=["POST"])
 @token_required
 def reserve():
-    current_user = request.current_user
-    data = request.get_json(silent=True) or {}
+    return jsonify({
+        "error": "Endpoint disabled. Use /api/guest-reservations instead."
+    }), 410
 
-    try:
-        result = core.api_guest_reservations(
-            current_user,
-            first_name=data.get("first_name"),
-            last_name=data.get("last_name"),
-            email=data.get("email"),
-            phone=data.get("phone"),
-            stay_date_str=(data.get("stay_date_str") or data.get("stay_date")),
-        )
 
-        # demo email outbox log (no real emails sent)
-        try:
-            with open("/var/log/pms/emails.log", "a") as f:
-                f.write(
-                    f'TO: {data.get("email","")} | SUBJECT: Reservation Confirmation | STATUS: QUEUED\n'
-                )
-        except Exception:
-            pass
 
-        return jsonify(result), 201
 
-    except core.BadRequest as e:
-        return jsonify({"error": str(e)}), 400
-    except core.Forbidden as e:
-        return jsonify({"error": str(e)}), 403
+
+# disable /api/reserve to avoid confusion (UI uses /api/guest-reservations) / us
+
+#@app.route("/api/reserve", methods=["POST"])
+#@token_required
+#def reserve():
+#    current_user = request.current_user
+#    data = request.get_json(silent=True) or {}
+#
+#    try:
+#        result = core.api_guest_reservations(
+#            current_user,
+#            first_name=data.get("first_name"),
+#            last_name=data.get("last_name"),
+#            email=data.get("email"),
+#            phone=data.get("phone"),
+#            stay_date_str=(data.get("stay_date_str") or data.get("stay_date")),
+#        )
+#
+#        # demo email outbox log (no real emails sent)
+#        try:
+#            with open("/var/log/pms/emails.log", "a") as f:
+#                f.write(
+#                    f'TO: {data.get("email","")} | SUBJECT: Reservation Confirmation | STATUS: QUEUED\n'
+#                )
+#        except Exception:
+#            pass
+#
+#        return jsonify(result), 201
+#
+#    except core.BadRequest as e:
+#        return jsonify({"error": str(e)}), 400
+#    except core.Forbidden as e:
+#        return jsonify({"error": str(e)}), 403
 
 
 
