@@ -1,0 +1,8 @@
+HTTP/1.1 200 OK
+Server: nginx/1.28.0
+Date: Tue, 06 Jan 2026 01:10:53 GMT
+Content-Type: application/json
+Content-Length: 434
+Connection: keep-alive
+
+{"dates":["2026-01-06","2026-01-07","2026-01-08","2026-01-09","2026-01-10"],"grid":[["BOOKED","BOOKED","BOOKED","FREE","FREE"],["BOOKED","FREE","BOOKED","FREE","FREE"],["BOOKED","FREE","BOOKED","FREE","FREE"],["BOOKED","FREE","FREE","FREE","FREE"],["BOOKED","FREE","FREE","FREE","FREE"]],"rooms":[{"id":1,"room_number":101},{"id":2,"room_number":102},{"id":3,"room_number":103},{"id":4,"room_number":104},{"id":5,"room_number":105}]}

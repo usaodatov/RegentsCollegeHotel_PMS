@@ -1,0 +1,8 @@
+HTTP/1.1 200 OK
+Server: nginx/1.28.0
+Date: Tue, 06 Jan 2026 01:10:47 GMT
+Content-Type: application/json
+Content-Length: 46
+Connection: keep-alive
+
+{"db_mode":"mysql","git":"059c4eb","ok":true}
